@@ -1,0 +1,8 @@
+version: "1"
+
+services:
+  spar-discord-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: spar-discord-bot:latest
