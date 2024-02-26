@@ -108,6 +108,12 @@ func main() {
 }
 
 func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Recovered from panic: %s", r))
+		}
+	}()
+
 	// Ignore messages from the bot itself
 	if m.Author.ID == s.State.User.ID {
 		return
@@ -126,7 +132,11 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		}
 
 		year, week_idx := date.ISOWeek()
-		scraping.GetSubdividedMenus(data_path, year, week_idx)
+		err := scraping.GetSubdividedMenus(data_path, year, week_idx)
+		if err != nil {
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Error: %s", err))
+			return
+		}
 
 		if this_week && (strings.Contains(strings.ToLower(m.Content), "tomorrow") || strings.Contains(strings.ToLower(m.Content), "jutri") || strings.Contains(strings.ToLower(m.Content), "jutre")) {
 			date = date.AddDate(0, 0, 1)
@@ -145,7 +155,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		imagePath := scraping.GetImagePathFromDate(data_path, date)
 		imageData, err := os.ReadFile(imagePath)
 		if err != nil {
-			fmt.Println("Error reading image file: ", err)
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Error: %s", err))
 			return
 		}
 
@@ -174,7 +184,8 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 			},
 		})
 		if err != nil {
-			fmt.Println("Error sending message: ", err)
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Error: %s", err))
+			return
 		}
 	}
 }

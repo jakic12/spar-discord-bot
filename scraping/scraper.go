@@ -11,12 +11,6 @@ import (
 	"time"
 )
 
-func check(e error) {
-	if e != nil {
-		panic(e)
-	}
-}
-
 func GetWeeklyMenuImageUrlFromSpar(year int, week int) string {
 	/*
 		res, err := http.Get(os.Getenv("BASE_MENU_URL"))
@@ -51,47 +45,61 @@ func GetWeeklyMenuImageUrlFromSpar(year int, week int) string {
 	return fmt.Sprintf("https://www.spar.si/content/dam/sparsiwebsite/restavracija-interspar/jedilniki/03-24/jedilnik-%02d-%02d.jpg", week, year-(year/1000)*1000)
 }
 
-func GetWeeklyMenuImage(imageURL string, imagePath string) {
+func GetWeeklyMenuImage(imageURL string, imagePath string) error {
 	res, err := http.Get(imageURL)
-	check(err)
+	if err != nil {
+		return err
+	}
 	defer res.Body.Close()
 
 	fmt.Printf("[DONE]{%s} %s\n", res.Status, imageURL)
 
 	bytes, _ := io.ReadAll(res.Body)
 	err = os.WriteFile(imagePath, bytes, 0644)
-	check(err)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func GetSubdividedMenus(data_path string, year int, week int) {
+func GetSubdividedMenus(data_path string, year int, week int) error {
 	menu_img_path := fmt.Sprintf("%s%02d.jpg", data_path, week)
 	if _, err := os.Stat(menu_img_path); errors.Is(err, os.ErrNotExist) {
 		weekly_url := GetWeeklyMenuImageUrlFromSpar(year, week)
 		GetWeeklyMenuImage(weekly_url, menu_img_path)
 	} else if err != nil {
-		panic(err)
+		return err
 	}
 
 	sub_images_folder := fmt.Sprintf("%s%02d/", data_path, week)
 
 	if _, err := os.Stat(sub_images_folder); errors.Is(err, os.ErrNotExist) {
 		if err := os.Mkdir(sub_images_folder, os.ModePerm); err != nil {
-			panic(err)
+			if err != nil {
+				return err
+			}
 		}
 
 		image_file, err := os.Open(menu_img_path)
-		check(err)
+		if err != nil {
+			return err
+		}
 
 		big_menu, err := jpeg.Decode(image_file)
 		for i := 1; i < 7; i++ {
 			small_menu, err := getSubMenuForDay(big_menu, i)
 			writeImage(small_menu, fmt.Sprintf("%s/%d.jpg", sub_images_folder, i))
-			check(err)
+			if err != nil {
+				return err
+			}
 		}
-		check(err)
+		if err != nil {
+			return err
+		}
 	} else if err != nil {
-		panic(err)
+		return err
 	}
+	return nil
 }
 
 func getSubMenuForDay(img image.Image, day int) (image.Image, error) {
@@ -107,9 +115,15 @@ func getSubMenuForDay(img image.Image, day int) (image.Image, error) {
 	out_x_start := out_x * (day_coef % 3)
 	out_y_start := out_y * (day_coef / 3)
 
-	return img.(interface {
+	sub_image, ok := img.(interface {
 		SubImage(r image.Rectangle) image.Image
-	}).SubImage(image.Rect(out_x_start, out_y_start, out_x_start+out_x, out_y_start+out_y)), nil
+	})
+
+	if !ok {
+		return img, errors.New("image does not support cropping")
+	}
+
+	return sub_image.SubImage(image.Rect(out_x_start, out_y_start, out_x_start+out_x, out_y_start+out_y)), nil
 }
 
 func GetImagePathFromDate(data string, date time.Time) string {
